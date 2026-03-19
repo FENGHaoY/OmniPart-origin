@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 try:
     from scipy import ndimage as ndi  # type: ignore
@@ -251,6 +251,73 @@ def _colorize_mask(a: np.ndarray) -> np.ndarray:
     return out
 
 
+def _load_default_font() -> ImageFont.ImageFont:
+    return ImageFont.load_default()
+
+
+def _add_legend_panel(
+    img_rgb: np.ndarray,
+    labels: List[int],
+    *,
+    title: str,
+    panel_width: int = 300,
+    swatch: int = 22,
+    pad: int = 14,
+    row_gap: int = 10,
+) -> np.ndarray:
+    """
+    Concatenate a right-side legend panel: color swatch + label id text.
+    """
+    if img_rgb.ndim != 3 or img_rgb.shape[2] != 3:
+        raise ValueError("img_rgb must be HxWx3 (RGB)")
+
+    h = img_rgb.shape[0]
+    panel = Image.new("RGB", (panel_width, h), (18, 18, 18))
+    draw = ImageDraw.Draw(panel)
+    font = _load_default_font()
+
+    y = pad
+    draw.text((pad, y), title, fill=(245, 245, 245), font=font)
+    y += swatch + row_gap
+
+    # stable ordering: background -> unlabeled -> non-negative ascending
+    ordered: List[int] = []
+    for x in (-2, -1):
+        if x in labels:
+            ordered.append(x)
+    ordered.extend(sorted([x for x in labels if x >= 0]))
+
+    def label_to_color(label: int) -> Tuple[int, int, int]:
+        if label == -2:
+            return (0, 0, 0)
+        if label == -1:
+            return (110, 110, 110)
+        palette = [
+            (255, 59, 48),
+            (52, 199, 89),
+            (0, 122, 255),
+            (255, 149, 0),
+            (175, 82, 222),
+            (255, 45, 85),
+            (90, 200, 250),
+            (255, 214, 10),
+            (48, 209, 88),
+            (191, 90, 242),
+        ]
+        return palette[int(label) % len(palette)]
+
+    for lab in ordered:
+        color = label_to_color(int(lab))
+        draw.rectangle([pad, y, pad + swatch, y + swatch], fill=color, outline=(230, 230, 230))
+        draw.text((pad + swatch + 12, y + 3), f"label {int(lab)}", fill=(245, 245, 245), font=font)
+        y += swatch + row_gap
+        if y > h - pad - swatch:
+            draw.text((pad, h - pad - swatch), "...", fill=(245, 245, 245), font=font)
+            break
+
+    return np.concatenate([img_rgb, np.asarray(panel, dtype=np.uint8)], axis=1)
+
+
 def _overlay_mask_boundaries(rgb: np.ndarray, mask: np.ndarray, *, alpha: float = 0.45) -> np.ndarray:
     color = _colorize_mask(mask)
     blended = (rgb.astype(np.float32) * (1.0 - alpha) + color.astype(np.float32) * alpha).clip(
@@ -356,11 +423,36 @@ def process_one(
 
     if debug_vis:
         sem = seg_512["semantic_segmentation"]
+        ins = seg_512["instance_segmentation"]
+
         _save_rgb(os.path.join(out_dbg_dir, f"{stem}_rgb.png"), rgb_512)
-        _save_rgb(os.path.join(out_dbg_dir, f"{stem}_semantic_color.png"), _colorize_mask(sem))
+
+        sem_color = _colorize_mask(sem)
+        sem_overlay = _overlay_mask_boundaries(rgb_512, sem, alpha=0.45)
+        sem_labels = [int(x) for x in np.unique(sem).tolist()]
+        _save_rgb(os.path.join(out_dbg_dir, f"{stem}_semantic_color.png"), sem_color)
+        _save_rgb(os.path.join(out_dbg_dir, f"{stem}_semantic_overlay.png"), sem_overlay)
         _save_rgb(
-            os.path.join(out_dbg_dir, f"{stem}_semantic_overlay.png"),
-            _overlay_mask_boundaries(rgb_512, sem, alpha=0.45),
+            os.path.join(out_dbg_dir, f"{stem}_semantic_color_legend.png"),
+            _add_legend_panel(sem_color, sem_labels, title="semantic_segmentation"),
+        )
+        _save_rgb(
+            os.path.join(out_dbg_dir, f"{stem}_semantic_overlay_legend.png"),
+            _add_legend_panel(sem_overlay, sem_labels, title="semantic_segmentation"),
+        )
+
+        ins_color = _colorize_mask(ins)
+        ins_overlay = _overlay_mask_boundaries(rgb_512, ins, alpha=0.45)
+        ins_labels = [int(x) for x in np.unique(ins).tolist()]
+        _save_rgb(os.path.join(out_dbg_dir, f"{stem}_instance_color.png"), ins_color)
+        _save_rgb(os.path.join(out_dbg_dir, f"{stem}_instance_overlay.png"), ins_overlay)
+        _save_rgb(
+            os.path.join(out_dbg_dir, f"{stem}_instance_color_legend.png"),
+            _add_legend_panel(ins_color, ins_labels, title="instance_segmentation"),
+        )
+        _save_rgb(
+            os.path.join(out_dbg_dir, f"{stem}_instance_overlay_legend.png"),
+            _add_legend_panel(ins_overlay, ins_labels, title="instance_segmentation"),
         )
 
     return row

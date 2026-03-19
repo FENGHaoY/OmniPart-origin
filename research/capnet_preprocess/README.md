@@ -28,6 +28,25 @@
 - `instance_segmentation`：`int32`
 - `depth_segmentation`：`bool`
 
+### 语义编号约定（当前 CAP-net 数据）
+
+你已确认的语义映射如下（来自 `metafile/*.json` 的 `target_gaparts`）：
+
+- `0`: `line_fixed_handle`
+- `1`: `round_fixed_handle`
+- `2`: `slider_button`
+- `3`: `hinge_door`
+- `4`: `slider_drawer`
+- `5`: `slider_lid`
+- `6`: `hinge_lid`
+- `7`: `hinge_knob`
+- `8`: `hinge_handle`
+
+特殊值约定：
+
+- `-2`: 背景（background）
+- `-1`: base
+
 ### 单条处理（单文件）
 直接传 `--rgb` + `--npz`。
 
@@ -40,7 +59,10 @@
 - `rgb_512/*.png`
 - `segmentation_512/*.npz`
 - `debug_vis/`（可选）：
-  - `*_semantic_overlay.png` / `*_semantic_color.png` / `*_rgb.png`
+  - `*_rgb.png`
+  - `*_semantic_color.png` / `*_semantic_overlay.png`
+  - `*_instance_color.png` / `*_instance_overlay.png`
+  - `*_semantic_*_legend.png` / `*_instance_*_legend.png`（右侧附带颜色→label 标注）
 - `preprocess_report.json`（批量）或 `preprocess_report_single.json`（单条）
 
 ---
