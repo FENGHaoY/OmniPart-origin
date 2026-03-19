@@ -296,5 +296,5 @@ python research/single_view_part_seg/infer.py \
 
 建议：
 
-- 减少保存频率：例如 `--save_every 5`
+- 减少保存频率：例如 `--save_every 10`
 - 检查输出目录可用空间/配额
